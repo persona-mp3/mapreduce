@@ -71,6 +71,7 @@ fn custom_map(key: &String, value: &str) -> Vec<worker::MKeyValue> {
     //     fs::read_to_string(key).expect(" [USER_MAP] Could not open source_file for key provided ");
     //
     println!("[USER_MAP]: Starting implementation");
+    let value = value.to_ascii_lowercase();
     let mut words = value.split_ascii_whitespace();
     let mut kv_pairs = vec![];
     for word in words {
@@ -84,5 +85,15 @@ fn custom_map(key: &String, value: &str) -> Vec<worker::MKeyValue> {
 }
 
 fn custom_reduce(key: String, values: Vec<String>) -> String {
-    String::from("custom reduce ")
+    // Technically, you could just get the length of `values`, but
+    // if these values were different, then, this would be simply wrong
+    let mut curr_count: u32 = 0;
+    for val in values {
+        // this is corrupted data, but since this is user impl, we might not bother?
+        // but since data is corrupted, might as well quit the whole job
+        let s = val.parse::<u32>().unwrap_or_default();
+        curr_count += s;
+    }
+
+    format!("{} -> {}", key, curr_count)
 }

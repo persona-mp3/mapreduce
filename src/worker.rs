@@ -30,8 +30,8 @@ struct HashCounter {
 
 pub fn worker(
     task_file_name: &String,
-    map: MapFn,
-    reduce: ReduceFn,
+    map_fn: MapFn,
+    reduce_fn: ReduceFn,
 ) -> Result<Vec<MKeyValue>, Box<dyn std::error::Error>> {
     println!("[WORKER] Woker starting");
     let content = match fs::read_to_string(task_file_name) {
@@ -49,7 +49,7 @@ pub fn worker(
     // I'm not sure yet, but I think I can wayne on the second one, since it almost
     // looks like the function signature described in the GO code
     let mut words = content.split_ascii_whitespace();
-    let mut list_kv_pairs = map(task_file_name, &content);
+    let mut list_kv_pairs = map_fn(task_file_name, &content);
     // for kv in list_kv_pairs.iter() {
     //     println!("{:?}", kv);
     // }
@@ -90,7 +90,11 @@ pub fn worker(
     }
 
     for (k, v) in tally {
-        println!("{} | {:?}", k, v);
+        println!("{}",reduce_fn(k, v.values))
     }
+
+    // I guess this is where we submit the results from the reduceFn to the out-file? and then alert the
+    // master coord
+
     Ok(list_kv_pairs)
 }
