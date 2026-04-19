@@ -26,15 +26,27 @@ struct HashCounter {
 
 #[derive(Debug)]
 pub struct WorkerInstruction {
+    /// Send channel the worker uses to communicate with the coordinator
     pub send_ch: Sender<Option<Vec<MKeyValue>>>,
+
+    /// The worker will look into this file path to get the input.
+    ///
+    /// At the moment, it must be utf-8 encoded, otherwise the worker errors
     pub file_path: String,
+
+    /// Map implementation of the user
     pub map_fn: MapFn,
+
+    /// Reduce implementation of the user
     pub reduce_fn: ReduceFn,
 }
 
 const FILE_PREFIX: &str = "mr";
 
-/// Worker function
+/// Worker function takes the file path of where the  work exists, extracts the contents and feeds
+/// it into the `map_fn` and then into the `reduce_fn`. The list of key-value pairs returned are
+/// from the result of the `map_fn`. The final output after the MapReduce is written to a
+/// destination file.
 pub fn worker(
     task_file_path: &String,
     map_fn: MapFn,
@@ -77,6 +89,9 @@ pub fn worker(
         }
     }
 
+    // TODO: Add sorting here, so that the result can easily be reproduceable even though multiple
+    // runs produce the same correctness, but different order. It's going to be harder to test
+    // otherwise
     let mut full_content = String::from("");
     for (k, v) in tally {
         let out = reduce_fn(k, v.values);
@@ -92,6 +107,7 @@ pub fn worker(
             return Err("Couldnt find path seperator".into());
         }
     };
+
     let dest_file_name = format!("{FILE_PREFIX}-{file_name}");
     match write_to_dest(&full_content, &dest_file_name) {
         Ok(_) => (),
@@ -104,6 +120,9 @@ pub fn worker(
     Ok(list_kv_pairs)
 }
 
+/// Spawns a thread and provides the instruction to the worker function. After success or failure
+/// the `send channel` is dropped. This function panics on send. The handler is returned for the
+/// caller or coordinator to join to their main thread
 pub fn thread_worker(instruction: WorkerInstruction) -> JoinHandle<()> {
     let handle = thread::spawn(move || {
         let result = worker(
@@ -135,8 +154,11 @@ pub fn thread_worker(instruction: WorkerInstruction) -> JoinHandle<()> {
     handle
 }
 
+/// Workers write the output of their reduce function to RESULT_DIR/<PREFIX_NAME>-<filename>
 const RESULT_DIR: &str = "results";
 
+/// Writes output to destination file by creating it in the `RESULT_DIR`'s directory. If the file
+/// already exists, the file is truncated and written to
 fn write_to_dest(content: &str, dest: &str) -> Result<(), Box<dyn std::error::Error>> {
     let full_path = PathBuf::from(RESULT_DIR).join(dest);
     let mut handler = match fs::File::options().create(true).write(true).open(full_path) {
@@ -164,6 +186,5 @@ fn write_to_dest(content: &str, dest: &str) -> Result<(), Box<dyn std::error::Er
         }
     };
 
-    println!("Bytes written to {dest}: {_bytes_written}");
     Ok(())
 }
