@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 use std::{fs, thread};
@@ -12,14 +14,7 @@ pub struct MKeyValue {
 pub type MapFn = fn(key: &String, value: &str) -> Vec<MKeyValue>;
 pub type ReduceFn = fn(key: String, values: Vec<String>) -> String;
 
-// Question: How do we get our data source from?
-// The formal spec says this is determined by the master node, where they
-// split the data into different partitions
-// Looking at the src code, it seems its' done via RPC?, but you wouldn't
-// want to send data via RPC, So instead we should use files instead to communicate
-// via RPC. I still dont get why we need to communicate via RPC, but I have not
-// use RPC in go neither am i experienced in rust, So if we just read from `source`
-pub fn ask_task() -> String {
+pub fn stub_rpc_request_task() -> String {
     String::new()
 }
 
@@ -36,6 +31,8 @@ pub struct WorkerInstruction {
     pub map_fn: MapFn,
     pub reduce_fn: ReduceFn,
 }
+
+const FILE_PREFIX: &str = "mr";
 
 /// Worker function
 pub fn worker(
@@ -56,13 +53,6 @@ pub fn worker(
         }
     };
 
-    // According to the task spec, we need to break a stream of text into words
-    // Now I'm confused. Here is the thing, the mapFn(key, value) -> Vec<KV>
-    // So what are we feeding it? OHH, all this we've done here is supposed to be the user_impl
-    // All we could give it the name of the file and the content
-    // I'm not sure yet, but I think I can wayne on the second one, since it almost
-    // looks like the function signature described in the GO code
-    // let words = content.split_ascii_whitespace();
     let list_kv_pairs = map_fn(task_file_path, &content);
 
     let mut tally: HashMap<String, HashCounter> = HashMap::with_capacity(list_kv_pairs.len());
@@ -87,15 +77,34 @@ pub fn worker(
         }
     }
 
+    let mut full_content = String::from("");
     for (k, v) in tally {
-        let _ = reduce_fn(k, v.values);
+        let out = reduce_fn(k, v.values);
+        full_content.push_str(out.as_str());
     }
+
+    // TODO: Refactor: this is fragile and shoulld consider using os-seperators
+    // but I think Rust handles that automatically for us
+    let file_name = match task_file_path.find("/") {
+        Some(index) => task_file_path.clone().split_off(index + 1),
+        None => {
+            println!("Couldnt find path seperator");
+            return Err("Couldnt find path seperator".into());
+        }
+    };
+    let dest_file_name = format!("{FILE_PREFIX}-{file_name}");
+    match write_to_dest(&full_content, &dest_file_name) {
+        Ok(_) => (),
+        Err(err) => {
+            return Err(err.into());
+        }
+    };
 
     println!("[worker] done with {task_file_path}");
     Ok(list_kv_pairs)
 }
 
-pub fn thread_worker(instruction: WorkerInstruction) -> JoinHandle<()>{
+pub fn thread_worker(instruction: WorkerInstruction) -> JoinHandle<()> {
     let handle = thread::spawn(move || {
         let result = worker(
             &instruction.file_path,
@@ -124,4 +133,37 @@ pub fn thread_worker(instruction: WorkerInstruction) -> JoinHandle<()>{
     });
 
     handle
+}
+
+const RESULT_DIR: &str = "results";
+
+fn write_to_dest(content: &str, dest: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let full_path = PathBuf::from(RESULT_DIR).join(dest);
+    let mut handler = match fs::File::options().create(true).write(true).open(full_path) {
+        Ok(fh) => fh,
+        Err(err) => {
+            let err_msg = format!(
+                "Could not create {dest}. 
+                Reason: {err}"
+            );
+            return Err(err_msg.into());
+        }
+    };
+
+    let _bytes_written = match handler.write(content.as_bytes()) {
+        Ok(n) => n,
+        Err(err) => {
+            let err_msg = format!(
+                "
+                Could not write to {dest}
+                Reason: {err}
+                "
+            );
+
+            return Err(err_msg.into());
+        }
+    };
+
+    println!("Bytes written to {dest}: {_bytes_written}");
+    Ok(())
 }

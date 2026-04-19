@@ -3,13 +3,14 @@ mod worker;
 // Source: http://nil.csail.mit.edu/6.5840/2025/labs/lab-mr.html
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // The final state of this project should make use of RPC's for communication 
+    // The final state of this project should make use of RPC's for communication
     // between workers and the coordinator node
     {
-        let _rpc_response = worker::ask_task();
+        let _rpc_response = worker::stub_rpc_request_task();
     }
 
     let current_tasks = vec![
+        coordinator::Task::new(String::from("tasks/adventure-of-sherlock-holmes.txt")),
         coordinator::Task::new(String::from("tasks/the_hemingway.txt")),
         coordinator::Task::new(String::from("tasks/caravan.txt")),
         coordinator::Task::new(String::from("tasks/poem.txt")),
@@ -52,5 +53,6 @@ fn custom_reduce(key: String, values: Vec<String>) -> String {
         curr_count += s;
     }
 
-    format!("{} -> {}", key, curr_count)
+    // Matching the format provided by the exercise
+    format!("{}: {}\n", key, curr_count)
 }
