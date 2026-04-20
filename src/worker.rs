@@ -123,7 +123,6 @@ pub fn worker(
     };
 
     println!("[worker] done with {task_file_path}");
-    println!("{:#?}", list_kv_pairs);
     Ok(list_kv_pairs)
 }
 
