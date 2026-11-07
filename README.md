@@ -11,4 +11,4 @@ The assignment spec followed from [Assignment](http://nil.csail.mit.edu/6.5840/2
 
 
 ### Purpose
-Implement version of MapReduce
+Implement non-distributed version of MapReduce
